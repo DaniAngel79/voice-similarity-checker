@@ -8,9 +8,6 @@ import gradio as gr
 def convert_to_wav(input_path):
     if input_path is None:
         return None
-    ext = os.path.splitext(input_path)[1].lower()
-    if ext == ".wav":
-        return input_path
     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
     tmp.close()
     subprocess.run(
@@ -91,7 +88,7 @@ def gradio_interface(audio1, audio2):
     result_text = (
         verdict + "\n" +
         "MFCC Distance: " + str(round(mfcc_dist, 4)) + "\n" +
-        "Threshold: < 0.10 same person | 0.10-0.25 uncertain | > 0.25 different"
+        "Threshold: < 0.10 same | 0.10-0.25 uncertain | > 0.25 different"
     )
     return result_text, spectrogram_path
 
@@ -99,15 +96,15 @@ def gradio_interface(audio1, audio2):
 interface = gr.Interface(
     fn=gradio_interface,
     inputs=[
-        gr.Audio(type="filepath", label="Audio 1"),
-        gr.Audio(type="filepath", label="Audio 2")
+        gr.Audio(type="filepath", label="Audio 1", format="wav"),
+        gr.Audio(type="filepath", label="Audio 2", format="wav")
     ],
     outputs=[
         gr.Textbox(label="Result", lines=3),
         gr.Image(label="Spectrograms")
     ],
     title="Voice Similarity Checker",
-    description="Upload two voice recordings to check if they belong to the same person. Supports WAV, MP3, OGG, OPUS, M4A, FLAC and more.",
+    description="Upload two voice recordings to check if they belong to the same person. Supports WAV, MP3, OGG, OPUS, M4A, FLAC and more. Gradio converts all formats to WAV automatically.",
     examples=[["audio_path_1.wav", "audio_path_2.wav"]]
 )
 
