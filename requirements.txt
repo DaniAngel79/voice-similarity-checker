@@ -1,0 +1,6 @@
+librosa>=0.10.0
+numpy>=1.23.0
+matplotlib>=3.6.0
+fpdf2>=2.7.0
+gradio>=4.0.0
+soundfile>=0.12.0
