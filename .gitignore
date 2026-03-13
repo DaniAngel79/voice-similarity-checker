@@ -4,21 +4,15 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-*.egg
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb_checkpoints
 
 # Entornos virtuales
 .env
 .venv
 env/
 venv/
-
-# Outputs generados (no versionar)
-similarity_report.pdf
-spectrogram_output.png
 
 # Sistema
 .DS_Store
