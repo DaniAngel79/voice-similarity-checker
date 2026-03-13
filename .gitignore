@@ -1,19 +1,13 @@
-# Python
 __pycache__/
 *.py[cod]
-*.egg-info/
-dist/
-build/
-
-# Jupyter
 .ipynb_checkpoints/
-
-# Entornos virtuales
 .env
 .venv
 env/
 venv/
-
-# Sistema
 .DS_Store
 Thumbs.db
+# Audios reales de personas — no versionar
+*.ogg
+*.mp3
+**(1).wav
