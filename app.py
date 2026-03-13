@@ -2,13 +2,15 @@ import subprocess, os, tempfile
 import numpy as np
 import matplotlib.pyplot as plt
 import gradio as gr
+import torch
+import torchaudio
+from speechbrain.inference.speaker import SpeakerRecognition
 
-# Resemblyzer se instala en el Space via requirements.txt
-from resemblyzer import VoiceEncoder, preprocess_wav
-from pathlib import Path
 
-
-encoder = VoiceEncoder()
+verifier = SpeakerRecognition.from_hparams(
+    source="speechbrain/spkrec-ecapa-voxceleb",
+    savedir="/tmp/spkrec"
+)
 
 
 def convert_to_wav(input_path):
@@ -19,13 +21,6 @@ def convert_to_wav(input_path):
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     return tmp.name
-
-
-def get_embedding(audio_path):
-    wav_path = convert_to_wav(audio_path)
-    wav = preprocess_wav(Path(wav_path))
-    embedding = encoder.embed_utterance(wav)
-    return embedding
 
 
 def get_verdict(similarity):
@@ -64,11 +59,12 @@ def gradio_interface(file1, file2):
         return "Please upload both audio files.", None
     path1 = file1.name if hasattr(file1, "name") else file1
     path2 = file2.name if hasattr(file2, "name") else file2
-    emb1 = get_embedding(path1)
-    emb2 = get_embedding(path2)
-    similarity = float(np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2)))
+    wav1 = convert_to_wav(path1)
+    wav2 = convert_to_wav(path2)
+    score, prediction = verifier.verify_files(wav1, wav2)
+    similarity = float(score)
     verdict = get_verdict(similarity)
-    spec_path = plot_spectrograms(convert_to_wav(path1), convert_to_wav(path2))
+    spec_path = plot_spectrograms(wav1, wav2)
     result_text = (
         verdict + "\n" +
         "Similarity score: " + str(round(similarity, 4)) + "\n" +
@@ -88,7 +84,7 @@ interface = gr.Interface(
         gr.Image(label="Spectrograms")
     ],
     title="Voice Similarity Checker",
-    description="Upload two voice recordings to check if they belong to the same person. Uses Resemblyzer (Google GE2E) — a deep learning voice encoder trained on thousands of speakers."
+    description="Upload two voice recordings to check if they belong to the same person. Uses SpeechBrain ECAPA-TDNN — a deep learning speaker verification model trained on VoxCeleb."
 )
 
 interface.launch()
