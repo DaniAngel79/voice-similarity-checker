@@ -1,72 +1,46 @@
 import subprocess, os, tempfile
-import librosa
 import numpy as np
 import matplotlib.pyplot as plt
 import gradio as gr
 
+# Resemblyzer se instala en el Space via requirements.txt
+from resemblyzer import VoiceEncoder, preprocess_wav
+from pathlib import Path
+
+
+encoder = VoiceEncoder()
+
 
 def convert_to_wav(input_path):
-    if input_path is None:
-        return None
     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
     tmp.close()
     subprocess.run(
-        ["ffmpeg", "-y", "-i", input_path, "-ar", "22050", "-ac", "1", tmp.name],
+        ["ffmpeg", "-y", "-i", input_path, "-ar", "16000", "-ac", "1", tmp.name],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     return tmp.name
 
 
-def load_audio(audio_path):
+def get_embedding(audio_path):
     wav_path = convert_to_wav(audio_path)
-    audio, sr = librosa.load(wav_path, sr=None)
-    return audio, sr
+    wav = preprocess_wav(Path(wav_path))
+    embedding = encoder.embed_utterance(wav)
+    return embedding
 
 
-def calculate_spectral_features(audio, sr):
-    S = np.abs(librosa.stft(audio))
-    spectral_centroid = librosa.feature.spectral_centroid(S=S)[0]
-    spectral_flatness = librosa.feature.spectral_flatness(S=S)[0]
-    spectral_rolloff  = librosa.feature.spectral_rolloff(S=S)[0]
-    mfcc      = librosa.feature.mfcc(y=audio, sr=sr, n_mfcc=13)
-    mfcc_mean = np.mean(mfcc, axis=1)
-    return spectral_centroid, spectral_flatness, spectral_rolloff, mfcc_mean
-
-
-def compare_audio_features(f1, f2):
-    min_c = min(len(f1[0]), len(f2[0]))
-    min_f = min(len(f1[1]), len(f2[1]))
-    min_r = min(len(f1[2]), len(f2[2]))
-    centroid_diff = np.mean(np.abs(f1[0][:min_c] - f2[0][:min_c]))
-    flatness_diff = np.mean(np.abs(f1[1][:min_f] - f2[1][:min_f]))
-    rolloff_diff  = np.mean(np.abs(f1[2][:min_r] - f2[2][:min_r]))
-    cosine_sim    = np.dot(f1[3], f2[3]) / (np.linalg.norm(f1[3]) * np.linalg.norm(f2[3]))
-    mfcc_distance = 1 - cosine_sim
-    spectral_score = centroid_diff + flatness_diff + rolloff_diff
-    return spectral_score, mfcc_distance, centroid_diff, flatness_diff, rolloff_diff
-
-
-def get_verdict(mfcc_distance):
-    if mfcc_distance < 0.10:
+def get_verdict(similarity):
+    if similarity > 0.85:
         return "✅ Same person.  (High confidence)"
-    elif mfcc_distance < 0.25:
-        return "⚠️ Uncertain — possibly different persons.  (Low confidence)"
+    elif similarity > 0.70:
+        return "⚠️ Possibly same person.  (Low confidence)"
     else:
         return "❌ Different persons.  (High confidence)"
 
 
-def determine_similarity(file1, file2):
-    if file1 is None or file2 is None:
-        return "Please upload both audio files.", None
-    path1 = file1.name if hasattr(file1, "name") else file1
-    path2 = file2.name if hasattr(file2, "name") else file2
-    audio_1, sr_1 = load_audio(path1)
-    audio_2, sr_2 = load_audio(path2)
-    f1 = calculate_spectral_features(audio_1, sr_1)
-    f2 = calculate_spectral_features(audio_2, sr_2)
-    result = compare_audio_features(f1, f2)
-    mfcc_distance = result[1]
-    verdict = get_verdict(mfcc_distance)
+def plot_spectrograms(path1, path2):
+    import librosa
+    audio_1, sr_1 = librosa.load(path1, sr=None)
+    audio_2, sr_2 = librosa.load(path2, sr=None)
     fig, axes = plt.subplots(2, 1, figsize=(12, 6))
     librosa.display.specshow(
         librosa.amplitude_to_db(np.abs(librosa.stft(audio_1)), ref=np.max),
@@ -82,16 +56,29 @@ def determine_similarity(file1, file2):
     spectrogram_path = "/tmp/spectrogram_output.png"
     plt.savefig(spectrogram_path, dpi=150, bbox_inches="tight")
     plt.close()
+    return spectrogram_path
+
+
+def gradio_interface(file1, file2):
+    if file1 is None or file2 is None:
+        return "Please upload both audio files.", None
+    path1 = file1.name if hasattr(file1, "name") else file1
+    path2 = file2.name if hasattr(file2, "name") else file2
+    emb1 = get_embedding(path1)
+    emb2 = get_embedding(path2)
+    similarity = float(np.dot(emb1, emb2) / (np.linalg.norm(emb1) * np.linalg.norm(emb2)))
+    verdict = get_verdict(similarity)
+    spec_path = plot_spectrograms(convert_to_wav(path1), convert_to_wav(path2))
     result_text = (
         verdict + "\n" +
-        "MFCC Distance: " + str(round(mfcc_distance, 4)) + "\n" +
-        "Threshold: < 0.10 same | 0.10-0.25 uncertain | > 0.25 different"
+        "Similarity score: " + str(round(similarity, 4)) + "\n" +
+        "Threshold: > 0.85 same | 0.70-0.85 uncertain | < 0.70 different"
     )
-    return result_text, spectrogram_path
+    return result_text, spec_path
 
 
 interface = gr.Interface(
-    fn=determine_similarity,
+    fn=gradio_interface,
     inputs=[
         gr.File(label="Audio 1 (WAV, MP3, OGG, OPUS, M4A, FLAC...)"),
         gr.File(label="Audio 2 (WAV, MP3, OGG, OPUS, M4A, FLAC...)")
@@ -101,7 +88,7 @@ interface = gr.Interface(
         gr.Image(label="Spectrograms")
     ],
     title="Voice Similarity Checker",
-    description="Upload two voice recordings in any format to check if they belong to the same person. Uses MFCC cosine distance + spectral analysis."
+    description="Upload two voice recordings to check if they belong to the same person. Uses Resemblyzer (Google GE2E) — a deep learning voice encoder trained on thousands of speakers."
 )
 
 interface.launch()
