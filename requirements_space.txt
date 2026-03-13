@@ -1,6 +1,6 @@
-speechbrain>=1.0.0
-torch>=2.0.0
-torchaudio>=2.0.0
+speechbrain==0.5.16
+torch==2.1.0
+torchaudio==2.1.0
 librosa>=0.10.0
 numpy>=1.23.0
 matplotlib>=3.6.0
