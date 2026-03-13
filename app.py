@@ -55,9 +55,13 @@ def get_verdict(mfcc_distance):
         return "❌ Different persons.  (High confidence)"
 
 
-def determine_similarity(audio_path_1, audio_path_2):
-    audio_1, sr_1 = load_audio(audio_path_1)
-    audio_2, sr_2 = load_audio(audio_path_2)
+def determine_similarity(file1, file2):
+    if file1 is None or file2 is None:
+        return "Please upload both audio files.", None
+    path1 = file1.name if hasattr(file1, "name") else file1
+    path2 = file2.name if hasattr(file2, "name") else file2
+    audio_1, sr_1 = load_audio(path1)
+    audio_2, sr_2 = load_audio(path2)
     f1 = calculate_spectral_features(audio_1, sr_1)
     f2 = calculate_spectral_features(audio_2, sr_2)
     result = compare_audio_features(f1, f2)
@@ -78,34 +82,26 @@ def determine_similarity(audio_path_1, audio_path_2):
     spectrogram_path = "/tmp/spectrogram_output.png"
     plt.savefig(spectrogram_path, dpi=150, bbox_inches="tight")
     plt.close()
-    return verdict, mfcc_distance, spectrogram_path
-
-
-def gradio_interface(audio1, audio2):
-    if audio1 is None or audio2 is None:
-        return "Please upload both audio files.", None
-    verdict, mfcc_dist, spectrogram_path = determine_similarity(audio1, audio2)
     result_text = (
         verdict + "\n" +
-        "MFCC Distance: " + str(round(mfcc_dist, 4)) + "\n" +
+        "MFCC Distance: " + str(round(mfcc_distance, 4)) + "\n" +
         "Threshold: < 0.10 same | 0.10-0.25 uncertain | > 0.25 different"
     )
     return result_text, spectrogram_path
 
 
 interface = gr.Interface(
-    fn=gradio_interface,
+    fn=determine_similarity,
     inputs=[
-        gr.Audio(type="filepath", label="Audio 1", format="wav"),
-        gr.Audio(type="filepath", label="Audio 2", format="wav")
+        gr.File(label="Audio 1 (WAV, MP3, OGG, OPUS, M4A, FLAC...)"),
+        gr.File(label="Audio 2 (WAV, MP3, OGG, OPUS, M4A, FLAC...)")
     ],
     outputs=[
         gr.Textbox(label="Result", lines=3),
         gr.Image(label="Spectrograms")
     ],
     title="Voice Similarity Checker",
-    description="Upload two voice recordings to check if they belong to the same person. Supports WAV, MP3, OGG, OPUS, M4A, FLAC and more. Gradio converts all formats to WAV automatically.",
-    examples=[["audio_path_1.wav", "audio_path_2.wav"]]
+    description="Upload two voice recordings in any format to check if they belong to the same person. Uses MFCC cosine distance + spectral analysis."
 )
 
 interface.launch()
